@@ -15,6 +15,13 @@ const quill = new Quill('#editor', {
                         $('#send').click();
                         return false;
                     }
+                },
+                tab: {
+                    ker: 'Tab',
+                    handler: function (range, context) {
+                        $('#send').focus();
+                        return false
+                    }
                 }
             }
         }
