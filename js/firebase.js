@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-import { getDatabase, ref, set, push, onChildAdded } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";;
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
+import { getDatabase, ref, set, push, onValue } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";;
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
 
 import firebaseConfig from "./api.js"
 
@@ -13,47 +13,143 @@ const auth = getAuth(app);
 
 let currentUser = null
 
-// ログイン状態の監視
+$("body").addClass("remove-scrolling");
+$(".content").hide();
 onAuthStateChanged(auth, (user) => {
     currentUser = user
     if (user) {
         $("#user-icon").html('<img class="user-icon" src="' + user.photoURL + '">')
-    } else {
-        signInWithPopup(auth, provider);
+        $(".start").hide();
+        $(".content").show();
+        $("body").removeClass("remove-scrolling");
     }
-});
+})
 
-$(document).on("click", "#sign-out", function () {
-    signOut(auth)
-});
+$(".start button").on("click", function () {
+    signInWithPopup(auth, provider);
+})
 
 // データベース関係
 // Initialize Realtime Database and get a reference to the serv ice
 const database = getDatabase(app);
 
 const db = getDatabase();
-const dbRef = ref(db, 'test');
+const threadRef = ref(db, "thread")
+let current_threadId = localStorage.getItem("current-thread") || null;
+let messageRef = null
+
+$(".create").on("click", function () {
+    $(".thread-list").append('<input id="input-create-thread" type=text>');
+    $("#input-create-thread").focus()
+});
+
+$(document).on("blur", "#input-create-thread", function () {
+    $("#input-create-thread").remove()
+});
+
+$(document).on("keydown", "#input-create-thread", function (e) {
+    if (e.key === "Enter") {
+        $(".current-thread").removeClass("current-thread")
+        $(".thread-list").append('<p class="thread-title current-thread">' + $("#input-create-thread").val() + '</p>');
+
+        createThread($("#input-create-thread").val())
+        $("#input-create-thread").remove()
+
+        // changeThread()
+
+    }
+});
+
+function createThread(title) {
+    const newThreadRef = push(threadRef);   // 新しいIDを発行
+    const threadId = newThreadRef.key;
+
+    set(newThreadRef, {
+        title: title,
+    });
+    localStorage.setItem("current-thread", threadId)
+
+    return threadId;
+}
+
+onValue(threadRef, (snapshot) => {
+    $(".thread-list").html("");
+
+    snapshot.forEach((childSnapshot) => {
+        const threadId = childSnapshot.key
+        const data = childSnapshot.val()
+
+        const title = data.title
+
+        let item = null
+        setTimeout(() => {
+            if (localStorage.getItem("current-thread")) {
+                if (localStorage.getItem("current-thread") == threadId) {
+                    item = '<p class="thread-title current-thread" id="' + threadId + '">' + title + '</p>';
+                    messageRef = ref(db, 'messages/' + threadId)
+                    $(".chat-header").html('<p>'+title+'</p>');
+                }
+                else {
+                    item = '<p class="thread-title" id="' + threadId + '">' + title + '</p>';
+                }
+            } else {
+                item = '<p class="thread-title" id="' + threadId + '">' + title + '</p>';
+            }
+            $(".thread-list").append(item);
+        }, 1);
+    });
+    setTimeout(() => {
+        subscribe()        
+    }, 1);
+});
+
+$(document).on("click",".thread-list", function () {
+    let threadId = 
+});
+
+function scroll() {
+    if (localStorage.getItem("scroll")) {
+        const save_scroll = localStorage.getItem("scroll")
+        $(".chat-list").scrollTop(save_scroll);
+    }
+}
+
+$(".chat-list").on("scroll", function () {
+    localStorage.setItem("scroll", $(".chat-list").scrollTop())
+});
+
+function subscribe() {
+    console.log(messageRef)
+    if (messageRef) {
+        onValue(messageRef, (snapshot) => {
+            console.log(snapshot)
+            $(".chat-list").html("");
+            snapshot.forEach(childsnapshot => {
+                console.log(childsnapshot)
+                const data = childsnapshot.val()
+
+                const sendUserIcon = data.uI
+                const sendUserName = data.uN;
+                const sendDate = data.date;
+                const html = data.html;
+                let h = '<div class="chat-msg ql-snow"><p class="chat-detail"><img class="user-icon" src="' + sendUserIcon + '"><span class="username">' + sendUserName + '</span><span class="date">' + sendDate + '</span></p><div class="ql-editor">' + html + '</div></div><hr>'
+                $(".chat-list").append(h);
+            });
+            scroll()
+        })
+    }
+}
+
 
 $("#send").on("click", function () {
-    const newPostRef = push(dbRef);
+    const newPostRef = push(messageRef);
     let date = new Date(Date.now())
-    console.log(date)
-    console.log(date.getDay())
     const msg = {
         uI: currentUser.photoURL,
         uN: currentUser.displayName,
-        date: (Number(date.getMonth())+1) + "月" + date.getDate() + "日" + date.getHours() + ":" + date.getMinutes(),
+        date: (Number(date.getMonth()) + 1).toString().padStart(2, "0") + "月" + date.getDate().toString().padStart(2, "0") + "日" + date.getHours().toString().padStart(2, "0") + ":" + date.getMinutes().toString().padStart(2, "0"),
         html: quill.root.innerHTML,
     };
     set(newPostRef, msg)
     quill.setText('');
 });
-
-onChildAdded(dbRef, function (data) {
-    const sendUserIcon = data.val().uI
-    const sendUserName = data.val().uN;
-    const sendDate = data.val().date;
-    const html = data.val().html;
-    let h = '<div class="chat-msg ql-snow"><p class="chat-detail"><img class="user-icon" src="' + sendUserIcon + '"><span class="username">' + sendUserName + '</span><span class="date">' + sendDate + '</span></p><div class="ql-editor">' + html + '</div></div><hr>'
-    $(".chat-list").append(h);
-})
