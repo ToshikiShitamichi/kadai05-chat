@@ -50,13 +50,8 @@ $(document).on("blur", "#input-create-thread", function () {
 $(document).on("keydown", "#input-create-thread", function (e) {
     if (e.key === "Enter") {
         $(".current-thread").removeClass("current-thread")
-        $(".thread-list").append('<p class="thread-title current-thread">' + $("#input-create-thread").val() + '</p>');
-
         createThread($("#input-create-thread").val())
         $("#input-create-thread").remove()
-
-        // changeThread()
-
     }
 });
 
@@ -68,8 +63,6 @@ function createThread(title) {
         title: title,
     });
     localStorage.setItem("current-thread", threadId)
-
-    return threadId;
 }
 
 onValue(threadRef, (snapshot) => {
@@ -87,7 +80,7 @@ onValue(threadRef, (snapshot) => {
                 if (localStorage.getItem("current-thread") == threadId) {
                     item = '<p class="thread-title current-thread" id="' + threadId + '">' + title + '</p>';
                     messageRef = ref(db, 'messages/' + threadId)
-                    $(".chat-header").html('<p>'+title+'</p>');
+                    $(".chat-header").html('<h3>' + title + '</h3>');
                 }
                 else {
                     item = '<p class="thread-title" id="' + threadId + '">' + title + '</p>';
@@ -99,33 +92,27 @@ onValue(threadRef, (snapshot) => {
         }, 1);
     });
     setTimeout(() => {
-        subscribe()        
+        subscribe()
     }, 1);
 });
 
-$(document).on("click",".thread-list", function () {
-    let threadId = 
+$(document).on("click", ".thread-title  ", function () {
+    $(".current-thread").removeClass("current-thread")
+    let threadId = $(this).attr("id");
+    messageRef = ref(db, 'messages/' + threadId)
+    localStorage.setItem("current-thread", threadId)
+    $("#" + threadId).addClass("current-thread");
+    $(".chat-header").html('<h3>' + $("#"+threadId).text() + '</h3>');
+    subscribe()
 });
 
-function scroll() {
-    if (localStorage.getItem("scroll")) {
-        const save_scroll = localStorage.getItem("scroll")
-        $(".chat-list").scrollTop(save_scroll);
-    }
-}
 
-$(".chat-list").on("scroll", function () {
-    localStorage.setItem("scroll", $(".chat-list").scrollTop())
-});
 
 function subscribe() {
-    console.log(messageRef)
     if (messageRef) {
         onValue(messageRef, (snapshot) => {
-            console.log(snapshot)
             $(".chat-list").html("");
             snapshot.forEach(childsnapshot => {
-                console.log(childsnapshot)
                 const data = childsnapshot.val()
 
                 const sendUserIcon = data.uI
@@ -152,4 +139,16 @@ $("#send").on("click", function () {
     };
     set(newPostRef, msg)
     quill.setText('');
+});
+
+// スクロール制御
+function scroll() {
+    if (localStorage.getItem("scroll")) {
+        const save_scroll = localStorage.getItem("scroll")
+        $(".chat-list").scrollTop(save_scroll);
+    }
+}
+
+$(".chat-list").on("scroll", function () {
+    localStorage.setItem("scroll", $(".chat-list").scrollTop())
 });

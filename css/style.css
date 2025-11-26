@@ -46,10 +46,13 @@
 
 .icon button{
     color: white;
+    padding: 10px;
+        border-radius: 5px 5px;
 }
 
-.icon:hover {
+.icon button:hover {
     background-color: #714774;
+    border-radius: 5px 5px;
 }
 
 .navbar-footer {
@@ -60,7 +63,7 @@
 }
 
 .navbar-footer img{
-    width: 90%;
+    width: 75%;
 }
 
 .current-nav {
@@ -182,5 +185,6 @@
 button {
     background-color: rgba(0, 0, 0, 0);
     border: none;
+    border-radius: 5px 5px;
     cursor: pointer;
 }
