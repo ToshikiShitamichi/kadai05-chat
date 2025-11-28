@@ -3,7 +3,7 @@
     overflow: hidden;
 }
 
-.start{
+.start {
     height: 90vh;
     display: flex;
     flex-direction: column;
@@ -36,7 +36,7 @@
     font-size: 50px;
 }
 
-.logo button{
+.logo button {
     color: white;
 }
 
@@ -44,10 +44,10 @@
     font-size: 40px;
 }
 
-.icon button{
+.icon button {
     color: white;
     padding: 10px;
-        border-radius: 5px 5px;
+    border-radius: 5px 5px;
 }
 
 .icon button:hover {
@@ -55,14 +55,7 @@
     border-radius: 5px 5px;
 }
 
-.navbar-footer {
-    height: 10%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.navbar-footer img{
+.navbar-footer img {
     width: 75%;
 }
 
@@ -96,7 +89,7 @@
     /* cursor: pointer; */
 }
 
-.create button{
+.create button {
     color: white;
 }
 
@@ -110,7 +103,7 @@
     font-size: 15px;
 }
 
-.thread-title{
+.thread-title {
     margin: 0;
     padding: 10px;
 }
@@ -150,16 +143,17 @@
     font-size: 15px;
 }
 
-.chat-detail{
+.chat-detail {
     display: flex;
     align-items: center;
 }
-.username{
+
+.username {
     font-weight: bold;
     margin-left: 5px;
 }
 
-.date{
+.date {
     font-size: 75%;
     color: gray;
     margin-left: 5px;
@@ -187,4 +181,32 @@ button {
     border: none;
     border-radius: 5px 5px;
     cursor: pointer;
+}
+
+.popup {
+    display: none;
+    height: 100vh;
+    width: 100%;
+    background: black;
+    opacity: 0.7;
+    position: fixed;
+    top: 0;
+    left: 0;
+}
+
+.popup-content {
+    height: 30%;
+    width: 50%;
+    background: #fff;
+    color: black;
+}
+
+.popup-show {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.popup button{
+    border: 1px solid black;
 }

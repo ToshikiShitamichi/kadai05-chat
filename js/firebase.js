@@ -39,20 +39,19 @@ let current_threadId = localStorage.getItem("current-thread") || null;
 let messageRef = null
 
 $(".create").on("click", function () {
-    $(".thread-list").append('<input id="input-create-thread" type=text>');
+    $(".popup").addClass("popup-show").fadeIn();
+    $(".popup").html('<div class="popup-content"><p><label for="input-create-thread">スレッド名</label><input id="input-create-thread" type=text name="input-create-thread"></p><p><label><input type="radio" name="visibility" value="public" checked>パブリック</label><label><input type="radio" name="visibility" value="private">プライベート</label></p><button id="popup-create">作成</button><button id="popup-close">閉じる</button></div>');
     $("#input-create-thread").focus()
 });
 
-$(document).on("blur", "#input-create-thread", function () {
-    $("#input-create-thread").remove()
+$(document).on("click", "#popup-close", function () {
+    $(".popup").removeClass("popup-show");
 });
 
-$(document).on("keydown", "#input-create-thread", function (e) {
-    if (e.key === "Enter") {
-        $(".current-thread").removeClass("current-thread")
-        createThread($("#input-create-thread").val())
-        $("#input-create-thread").remove()
-    }
+$(document).on("click", "#popup-create", function () {
+    $(".current-thread").removeClass("current-thread")
+    createThread($("#input-create-thread").val())
+    $(".popup").removeClass("popup-show");
 });
 
 function createThread(title) {
@@ -102,7 +101,7 @@ $(document).on("click", ".thread-title  ", function () {
     messageRef = ref(db, 'messages/' + threadId)
     localStorage.setItem("current-thread", threadId)
     $("#" + threadId).addClass("current-thread");
-    $(".chat-header").html('<h3>' + $("#"+threadId).text() + '</h3>');
+    $(".chat-header").html('<h3>' + $("#" + threadId).text() + '</h3>');
     subscribe()
 });
 
