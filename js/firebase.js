@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-import { getDatabase, ref, set, push, onValue, update, get } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";;
+import { getDatabase, ref, set, push, onValue, update, get, remove } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";;
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
 
 import firebaseConfig from "./api.js"
@@ -39,19 +39,20 @@ let current_threadId = localStorage.getItem("current-thread") || null;
 let messageRef = null
 
 $(".create").on("click", function () {
-    $(".popup").addClass("popup-show").fadeIn();
-    $(".popup").html('<div class="popup-content"><p><label for="input-create-thread">スレッド名</label><input id="input-create-thread" type=text name="input-create-thread"></p><button id="popup-create">作成</button><button id="popup-close">閉じる</button></div>');
+    $(".thread-list").append('<input id="input-create-thread" type=text>');
     $("#input-create-thread").focus()
 });
 
-$(document).on("click", "#popup-close", function () {
-    $(".popup").removeClass("popup-show");
+$(document).on("blur", "#input-create-thread", function () {
+    $("#input-create-thread").remove()
 });
 
-$(document).on("click", "#popup-create", function () {
-    $(".current-thread").removeClass("current-thread")
-    createThread($("#input-create-thread").val())
-    $(".popup").removeClass("popup-show");
+$(document).on("keydown", "#input-create-thread", function (e) {
+    if (e.key === "Enter") {
+        $(".current-thread").removeClass("current-thread")
+        createThread($("#input-create-thread").val())
+        $("#input-create-thread").remove()
+    }
 });
 
 function createThread(title) {
@@ -121,7 +122,7 @@ function subscribe() {
                 const likeCount = data.likeCount
                 const likeRef = ref(db, 'likes/' + childSnapshot.key + '/' + currentUser.uid)
 
-                let h = '<div class="chat-msg ql-snow" id="' + childSnapshot.key + '"><div class="msg-header"><p class="chat-detail"><img class="user-icon" src="' + sendUserIcon + '"><span class="username">' + sendUserName + '</span><span class="date">' + sendDate + '</span></p><div class="user-action"><button class="material-symbols-outlined">edit</button><button class="material-symbols-outlined">delete</button></div></div><div class="ql-editor">' + html + '<br><button class="like-btn material-symbols-outlined">favorite</button><span class="like-count">' + likeCount + '</span></div></div>'
+                let h = '<div class="chat-msg ql-snow" id="' + childSnapshot.key + '"><div class="msg-header"><p class="chat-detail"><img class="user-icon" src="' + sendUserIcon + '"><span class="username">' + sendUserName + '</span><span class="date">' + sendDate + '</span></p><div class="user-action"><button class="material-symbols-outlined chat-delete">delete</button></div></div><div class="ql-editor"><div class="chat-html">' + html + '</div><br><button class="like-btn material-symbols-outlined">favorite</button><span class="like-count">' + likeCount + '</span></div></div>'
                 $(".chat-list").append(h);
 
                 get(likeRef).then((likeSnap) => {
@@ -130,11 +131,8 @@ function subscribe() {
                     }
                 });
 
-                console.log($('.chat-msg#' + childSnapshot.key))
-
-                if(sendUserName != currentUser.displayName){
-                    console.log("in")
-                    $('.chat-msg#' + childSnapshot.key ).find('.user-action').addClass('user-action-none');
+                if (sendUserName != currentUser.displayName) {
+                    $('.chat-msg#' + childSnapshot.key).find('.user-action').addClass('user-action-none');
                 }
             });
             scroll()
@@ -177,6 +175,12 @@ $("#send").on("click", function () {
     quill.setText('');
 });
 
+$(document).on("click", ".chat-delete", function () {
+    const threadId = localStorage.getItem("current-thread")
+    const postRef = ref(db, 'messages/' + threadId + '/' + $(this).closest(".chat-msg").attr("id"))
+    remove(postRef)
+});
+
 // スクロール制御
 function scroll() {
     if (localStorage.getItem("scroll")) {
@@ -187,4 +191,48 @@ function scroll() {
 
 $(".chat-list").on("scroll", function () {
     localStorage.setItem("scroll", $(".chat-list").scrollTop())
+});
+
+const toolbarOptions = {
+    container: [
+        ['emoji'],
+        ['bold', 'italic', 'underline', 'strike'],
+        ['link', { list: 'ordered' }, { list: 'bullet' }],
+        ['code-block'],
+    ],
+    handlers: {
+        emoji: function () { }
+    }
+};
+
+const quill = new Quill('#editor', {
+    theme: 'snow',
+    placeholder: 'スレッドへのメッセージ',
+    modules: {
+        toolbar: toolbarOptions,
+
+        'emoji-toolbar': true,
+        'emoji-shortname': true,
+        keyboard: {
+            bindings: {
+                // Ctrl + Enter で送信
+                ctrl_enter: {
+                    key: 'Enter',
+                    ctrlKey: true,
+                    handler: function () {
+                        $('#send').click();
+                        return false;
+                    }
+                },
+                // Tabで送信ボタンにフォーカス
+                tab: {
+                    key: 'Tab',
+                    handler: function () {
+                        $('#send').focus();
+                        return false
+                    }
+                }
+            }
+        }
+    },
 });
