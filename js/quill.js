@@ -17,7 +17,6 @@ const quill = new Quill('#editor', {
         toolbar: toolbarOptions,
 
         'emoji-toolbar': true,
-        'emoji-textarea': true,
         'emoji-shortname': true,
         keyboard: {
             bindings: {

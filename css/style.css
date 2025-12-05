@@ -146,6 +146,33 @@
 .chat-detail {
     display: flex;
     align-items: center;
+    margin: 0;
+}
+
+.user-action-none{
+    display: none;
+}
+
+.msg-header{
+    display: flex;
+    justify-content: space-between;
+}
+
+.chat-msg .ql-editor{
+    margin-left: 22px;
+}
+
+.chat-msg:hover{
+    background-color: #F8F8F8;
+}
+
+.like-btn{
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.liked{
+  color: #e0245e;
 }
 
 .username {
