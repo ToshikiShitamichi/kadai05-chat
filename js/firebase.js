@@ -1,238 +1,331 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-import { getDatabase, ref, set, push, onValue, update, get, remove } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";;
+import { getDatabase, ref, set, push, onValue, update, get, remove, off } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
 
-import firebaseConfig from "./api.js"
+import firebaseConfig from "./api.js";
 
-// Initialize Firebase
+// Firebase 初期化
 const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
 // 認証関係
 const provider = new GoogleAuthProvider();
 const auth = getAuth(app);
 
-let currentUser = null
+// グローバル状態
+let currentUser = null;
+let currentThreadId = localStorage.getItem("current-thread") || null;
+let messageRef = null;
+let messageValueCallback = null;
 
+// Realtime Database の基準パス
+const THREAD_PATH = "thread";
+const MESSAGE_PATH = "messages";
+const LIKE_PATH = "likes";
+
+// ローカルストレージ key
+const LS_KEY_CURRENT_THREAD = "current-thread";
+const LS_KEY_SCROLL = "scroll";
+
+// ref を作るためのヘルパ
+const threadRef = ref(db, THREAD_PATH);
+const getMessageRef = (threadId) => ref(db, `${MESSAGE_PATH}/${threadId}`);
+const getLikeRef = (messageId, userId) => ref(db, `${LIKE_PATH}/${messageId}/${userId}`);
+
+// ログイン状態の監視
 $("body").addClass("remove-scrolling");
 $(".content").hide();
+
 onAuthStateChanged(auth, (user) => {
-    currentUser = user
+    currentUser = user;
+
     if (user) {
-        $("#user-icon").html('<img class="user-icon" src="' + user.photoURL + '">')
+        // ユーザーアイコンを表示
+        $("#user-icon").html(
+            `<img class="user-icon" src="${user.photoURL}">`
+        );
+
         $(".start").hide();
         $(".content").show();
         $("body").removeClass("remove-scrolling");
     }
-})
+});
 
+// ログインボタン
 $(".start button").on("click", function () {
     signInWithPopup(auth, provider);
-})
+});
 
-// データベース関係
-// Initialize Realtime Database and get a reference to the serv ice
-const database = getDatabase(app);
-
-const db = getDatabase();
-const threadRef = ref(db, "thread")
-let current_threadId = localStorage.getItem("current-thread") || null;
-let messageRef = null
-
+// スレッド作成
 $(".create").on("click", function () {
-    $(".thread-list").append('<input id="input-create-thread" type=text>');
-    $("#input-create-thread").focus()
+    // 新規スレッド名入力欄を追加
+    $(".thread-list").append('<input id="input-create-thread" type="text">')
+    $("#input-create-thread").focus();
 });
 
+// フォーカス外れたら入力欄削除
 $(document).on("blur", "#input-create-thread", function () {
-    $("#input-create-thread").remove()
+    $("#input-create-thread").remove();
 });
 
+// Enter でスレッド作成
 $(document).on("keydown", "#input-create-thread", function (e) {
     if (e.key === "Enter") {
-        $(".current-thread").removeClass("current-thread")
-        createThread($("#input-create-thread").val())
-        $("#input-create-thread").remove()
+        const title = $("#input-create-thread").val().trim();
+        if (title) {
+            $(".current-thread").removeClass("current-thread");
+            createThread(title);
+        }
+        $("#input-create-thread").remove();
     }
 });
 
+// スレッド作成処理
 function createThread(title) {
+    // thread/ に新しい push ref を作成
     const newThreadRef = push(threadRef);
     const threadId = newThreadRef.key;
 
+    // スレッドのタイトルを保存
     set(newThreadRef, {
         title: title,
     });
-    localStorage.setItem("current-thread", threadId)
+
+    // カレントスレッドとして保存
+    currentThreadId = threadId;
+    localStorage.setItem(LS_KEY_CURRENT_THREAD, threadId);
 }
 
+// スレッド一覧購読
 onValue(threadRef, (snapshot) => {
     $(".thread-list").html("");
 
+    // スナップショットを一旦配列に展開（描画のため）
+    const threads = [];
     snapshot.forEach((childSnapshot) => {
-        const threadId = childSnapshot.key
-        const data = childSnapshot.val()
-
-        const title = data.title
-
-        let item = null
-        setTimeout(() => {
-            if (localStorage.getItem("current-thread")) {
-                if (localStorage.getItem("current-thread") == threadId) {
-                    item = '<p class="thread-title current-thread" id="' + threadId + '">' + title + '</p>';
-                    messageRef = ref(db, 'messages/' + threadId)
-                    $(".chat-header").html('<h3>' + title + '</h3>');
-                }
-                else {
-                    item = '<p class="thread-title" id="' + threadId + '">' + title + '</p>';
-                }
-            } else {
-                item = '<p class="thread-title" id="' + threadId + '">' + title + '</p>';
-            }
-            $(".thread-list").append(item);
-        }, 1);
+        threads.push({
+            id: childSnapshot.key,
+            ...childSnapshot.val(),
+        });
     });
-    setTimeout(() => {
-        subscribe()
-    }, 1);
+
+    // 各スレッドを描画
+    threads.forEach((thread) => {
+        const isCurrent = currentThreadId && currentThreadId === thread.id;
+        const itemHtml = `<p class="thread-title${isCurrent ? " current-thread" : ""}" data-thread-id="${thread.id}">${thread.title}</p>`;
+        $(".thread-list").append(itemHtml);
+    });
+
+    // currentThreadId があればヘッダーと messageRef をセットして購読
+    if (currentThreadId) {
+        const currentThread = threads.find(
+            (t) => t.id === currentThreadId
+        );
+        if (currentThread) {
+            $(".chat-header").html(`<h3>${currentThread.title}</h3>`);
+            subscribeToMessages(currentThreadId);
+        }
+    }
 });
 
-$(document).on("click", ".thread-title  ", function () {
-    $(".current-thread").removeClass("current-thread")
-    let threadId = $(this).attr("id");
-    messageRef = ref(db, 'messages/' + threadId)
-    localStorage.setItem("current-thread", threadId)
-    $("#" + threadId).addClass("current-thread");
-    $(".chat-header").html('<h3>' + $("#" + threadId).text() + '</h3>');
-    subscribe()
+// スレッドをクリックした時の処理
+$(document).on("click", ".thread-title", function () {
+    const threadId = $(this).data("thread-id");
+
+    // カレントクラス切り替え
+    $(".current-thread").removeClass("current-thread");
+    $(this).addClass("current-thread");
+
+    // ヘッダー更新
+    $(".chat-header").html(`<h3>${$(this).text()}</h3>`);
+
+    // カレントスレッドIDを保存
+    currentThreadId = threadId;
+    localStorage.setItem(LS_KEY_CURRENT_THREAD, threadId);
+
+    // メッセージ購読し直し
+    subscribeToMessages(threadId);
 });
 
+// 現在のスレッドのメッセージ購読
+function subscribeToMessages(threadId) {
+    if (!threadId) return;
 
+    // 既存 listener があれば off する
+    if (messageRef && messageValueCallback) {
+        off(messageRef, "value", messageValueCallback);
+    }
 
-function subscribe() {
-    if (messageRef) {
-        onValue(messageRef, (snapshot) => {
-            $(".chat-list").html('');
-            snapshot.forEach(childSnapshot => {
-                const data = childSnapshot.val()
+    // 新しい messageRef を作成
+    messageRef = getMessageRef(threadId);
 
-                const sendUserIcon = data.uI
-                const sendUserName = data.uN;
-                const sendDate = data.date;
-                const html = data.html;
-                const likeCount = data.likeCount
-                const likeRef = ref(db, 'likes/' + childSnapshot.key + '/' + currentUser.uid)
+    // コールバックを定義
+    messageValueCallback = (snapshot) => {
+        $(".chat-list").html("");
 
-                let h = '<div class="chat-msg ql-snow" id="' + childSnapshot.key + '"><div class="msg-header"><p class="chat-detail"><img class="user-icon" src="' + sendUserIcon + '"><span class="username">' + sendUserName + '</span><span class="date">' + sendDate + '</span></p><div class="user-action"><button class="material-symbols-outlined chat-delete">delete</button></div></div><div class="ql-editor"><div class="chat-html">' + html + '</div><br><button class="like-btn material-symbols-outlined">favorite</button><span class="like-count">' + likeCount + '</span></div></div>'
-                $(".chat-list").append(h);
+        snapshot.forEach((childSnapshot) => {
+            const messageId = childSnapshot.key;
+            const data = childSnapshot.val();
 
-                get(likeRef).then((likeSnap) => {
-                    if (likeSnap.val() === true) {
-                        $('.chat-msg#' + childSnapshot.key).find('.like-btn').addClass('liked');
-                    }
-                });
+            const sendUserIcon = data.uI;
+            const sendUserName = data.uN;
+            const sendDate = data.date;
+            const html = data.html;
+            const likeCount = data.likeCount;
 
-                if (sendUserName != currentUser.displayName) {
-                    $('.chat-msg#' + childSnapshot.key).find('.user-action').addClass('user-action-none');
+            const likeRef = getLikeRef(messageId, currentUser.uid);
+
+            // メッセージ 1 件分の HTML
+            const msgHtml = `<div class="chat-msg ql-snow" id="${messageId}"><div class="msg-header"><p class="chat-detail"><img class="user-icon" src="${sendUserIcon}"><span class="username">${sendUserName}</span><span class="date">${sendDate}</span></p><div class="user-action"><button class="material-symbols-outlined chat-delete">delete</button></div></div><div class="ql-editor"><div class="chat-html">${html}</div><button class="like-btn material-symbols-outlined">favorite</button><span class="like-count">${likeCount}</span></div></div>`;
+
+            $(".chat-list").append(msgHtml);
+
+            // 自分が「いいね」したかどうかチェック
+            get(likeRef).then((likeSnap) => {
+                if (likeSnap.val() === true) {
+                    $(`.chat-msg#${messageId}`)
+                        .find(".like-btn")
+                        .addClass("liked");
                 }
             });
-            scroll()
-        })
-    }
+
+            // 自分以外の投稿には削除ボタンを非表示
+            if (!currentUser || sendUserName !== currentUser.displayName) {
+                $(`.chat-msg#${messageId}`)
+                    .find(".user-action")
+                    .addClass("user-action-none");
+            }
+        });
+
+        restoreScroll();
+    };
+
+    // onValue で購読開始
+    onValue(messageRef, messageValueCallback);
 }
 
+// 「いいね」ボタン
 $(document).on("click", ".like-btn", function () {
-    console.log($(this).siblings(".like-count").text())
-    let likeCount = Number($(this).siblings(".like-count").text())
-    const likeRef = ref(db, 'likes/' + $(this).closest(".chat-msg").attr("id") + '/' + currentUser.uid)
-    if ($(this).attr("class") != "like-btn material-symbols-outlined liked") {
-        $(this).addClass("liked");
-        likeCount += 1
-        set(likeRef, true)
+    if (!currentUser) return; // 念のため
+
+    const $btn = $(this);
+    const $chatMsg = $btn.closest(".chat-msg");
+    const messageId = $chatMsg.attr("id");
+    const $count = $btn.siblings(".like-count");
+
+    let likeCount = Number($count.text());
+    const likeRef = getLikeRef(messageId, currentUser.uid);
+
+    const isLiked = $btn.hasClass("liked");
+
+    if (!isLiked) {
+        $btn.addClass("liked");
+        likeCount += 1;
+        set(likeRef, true);
     } else {
-        $(this).removeClass("liked");
-        likeCount -= 1
-        set(likeRef, false)
+        $btn.removeClass("liked");
+        likeCount -= 1;
+        set(likeRef, false);
     }
-    $(this).siblings(".like-count").text(likeCount)
-    const threadId = localStorage.getItem("current-thread")
-    const postRef = ref(db, 'messages/' + threadId + '/' + $(this).closest(".chat-msg").attr("id"))
-    update(postRef, {
-        'likeCount': likeCount
-    })
+
+    $count.text(likeCount);
+
+    // いいね数を message に反映
+    if (!currentThreadId) return;
+    const postRef = ref(db, `${MESSAGE_PATH}/${currentThreadId}/${messageId}`);
+    update(postRef, { likeCount });
 });
 
+// メッセージ送信
 $("#send").on("click", function () {
+    if (!messageRef || !currentUser) return;
+
     const newPostRef = push(messageRef);
-    let date = new Date(Date.now())
+    const date = new Date();
+
+    const formattedDate =
+        String(date.getMonth() + 1).padStart(2, "0") +
+        "月" +
+        String(date.getDate()).padStart(2, "0") +
+        "日" +
+        String(date.getHours()).padStart(2, "0") +
+        ":" +
+        String(date.getMinutes()).padStart(2, "0");
+
     const msg = {
         uI: currentUser.photoURL,
         uN: currentUser.displayName,
-        date: (Number(date.getMonth()) + 1).toString().padStart(2, "0") + "月" + date.getDate().toString().padStart(2, "0") + "日" + date.getHours().toString().padStart(2, "0") + ":" + date.getMinutes().toString().padStart(2, "0"),
+        date: formattedDate,
         html: quill.root.innerHTML,
         likeCount: 0,
     };
-    set(newPostRef, msg)
-    quill.setText('');
+
+    set(newPostRef, msg);
+
+    quill.setText("");
 });
 
+// メッセージ削除
 $(document).on("click", ".chat-delete", function () {
-    const threadId = localStorage.getItem("current-thread")
-    const postRef = ref(db, 'messages/' + threadId + '/' + $(this).closest(".chat-msg").attr("id"))
-    remove(postRef)
+    if (!currentThreadId) return;
+
+    const messageId = $(this).closest(".chat-msg").attr("id");
+    const postRef = ref(db, `${MESSAGE_PATH}/${currentThreadId}/${messageId}`);
+    remove(postRef);
 });
 
 // スクロール制御
-function scroll() {
-    if (localStorage.getItem("scroll")) {
-        const save_scroll = localStorage.getItem("scroll")
-        $(".chat-list").scrollTop(save_scroll);
+function restoreScroll() {
+    const savedScroll = localStorage.getItem(LS_KEY_SCROLL);
+    if (savedScroll !== null) {
+        $(".chat-list").scrollTop(Number(savedScroll));
     }
 }
 
 $(".chat-list").on("scroll", function () {
-    localStorage.setItem("scroll", $(".chat-list").scrollTop())
+    localStorage.setItem(LS_KEY_SCROLL, $(".chat-list").scrollTop());
 });
 
+// Quill 設定
 const toolbarOptions = {
     container: [
-        ['emoji'],
-        ['bold', 'italic', 'underline', 'strike'],
-        ['link', { list: 'ordered' }, { list: 'bullet' }],
-        ['code-block'],
+        ["emoji"],
+        ["bold", "italic", "underline", "strike"],
+        ["link", { list: "ordered" }, { list: "bullet" }],
+        ["code-block"],
     ],
     handlers: {
-        emoji: function () { }
-    }
+        emoji: function () { },
+    },
 };
 
-const quill = new Quill('#editor', {
-    theme: 'snow',
-    placeholder: 'スレッドへのメッセージ',
+const quill = new Quill("#editor", {
+    theme: "snow",
+    placeholder: "スレッドへのメッセージ",
     modules: {
         toolbar: toolbarOptions,
-
-        'emoji-toolbar': true,
-        'emoji-shortname': true,
+        "emoji-toolbar": true,
+        "emoji-shortname": true,
         keyboard: {
             bindings: {
                 // Ctrl + Enter で送信
                 ctrl_enter: {
-                    key: 'Enter',
+                    key: "Enter",
                     ctrlKey: true,
                     handler: function () {
-                        $('#send').click();
+                        $("#send").click();
                         return false;
-                    }
+                    },
                 },
-                // Tabで送信ボタンにフォーカス
+                // Tab で送信ボタンにフォーカス
                 tab: {
-                    key: 'Tab',
+                    key: "Tab",
                     handler: function () {
-                        $('#send').focus();
-                        return false
-                    }
-                }
-            }
-        }
+                        $("#send").focus();
+                        return false;
+                    },
+                },
+            },
+        },
     },
 });
